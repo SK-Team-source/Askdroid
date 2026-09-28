@@ -1,0 +1,19 @@
+<svg width="1200" height="800" viewBox="0 0 1200 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="800" fill="#07141F"/>
+  <rect x="120" y="90" width="960" height="620" rx="32" fill="url(#paint0_linear)" stroke="#23394A"/>
+  <circle cx="326" cy="332" r="150" fill="#163449"/>
+  <circle cx="326" cy="332" r="62" fill="#62D8FF" fill-opacity="0.36"/>
+  <path d="M294 278L384 332L294 386V278Z" fill="#EAFBFF" fill-opacity="0.8"/>
+  <rect x="550" y="236" width="350" height="42" rx="21" fill="#ECFAFF" fill-opacity="0.76"/>
+  <rect x="550" y="302" width="290" height="26" rx="13" fill="#D8F0FF" fill-opacity="0.5"/>
+  <rect x="550" y="350" width="330" height="26" rx="13" fill="#D8F0FF" fill-opacity="0.38"/>
+  <rect x="550" y="398" width="280" height="26" rx="13" fill="#D8F0FF" fill-opacity="0.38"/>
+  <rect x="550" y="520" width="180" height="62" rx="31" fill="#68D8FF" fill-opacity="0.28"/>
+  <text x="600" y="660" text-anchor="middle" fill="#EAFBFF" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700">ASKDROID PODCAST</text>
+  <defs>
+    <linearGradient id="paint0_linear" x1="200" y1="120" x2="1000" y2="680" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0E1C2D"/>
+      <stop offset="1" stop-color="#081621"/>
+    </linearGradient>
+  </defs>
+</svg>
