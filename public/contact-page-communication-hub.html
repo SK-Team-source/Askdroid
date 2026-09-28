@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contact Hub Animation</title>
+<style>
+html,body{
+margin:0;
+height:100%;
+overflow:hidden;
+background:radial-gradient(circle at center,#081225,#020617 70%);
+}
+canvas{display:block;}
+</style>
+</head>
+<body>
+
+<script type="module">
+import * as THREE from 'https://unpkg.com/three@0.165.0/build/three.module.js';
+
+const scene = new THREE.Scene();
+
+const camera = new THREE.PerspectiveCamera(
+60,
+window.innerWidth/window.innerHeight,
+0.1,
+2000
+);
+camera.position.z = 120;
+
+const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+document.body.appendChild(renderer.domElement);
+
+// Main group
+const world = new THREE.Group();
+scene.add(world);
+
+// Stars
+const starGeo = new THREE.BufferGeometry();
+const starCount = 2500;
+const starPos = new Float32Array(starCount*3);
+
+for(let i=0;i<starCount;i++){
+starPos[i*3]=(Math.random()-0.5)*800;
+starPos[i*3+1]=(Math.random()-0.5)*500;
+starPos[i*3+2]=(Math.random()-0.5)*600;
+}
+
+starGeo.setAttribute('position',new THREE.BufferAttribute(starPos,3));
+
+const stars = new THREE.Points(
+starGeo,
+new THREE.PointsMaterial({
+size:1,
+color:'#67E8F9',
+transparent:true,
+opacity:0.8
+})
+);
+
+world.add(stars);
+
+// Central Hub
+const hub = new THREE.Mesh(
+new THREE.SphereGeometry(6,32,32),
+new THREE.MeshBasicMaterial({
+color:'#ffffff'
+})
+);
+world.add(hub);
+
+// Rings
+const rings=[];
+for(let i=0;i<4;i++){
+const ring = new THREE.Mesh(
+new THREE.RingGeometry(10+i*8,10.3+i*8,64),
+new THREE.MeshBasicMaterial({
+color:0x00d4ff,
+transparent:true,
+opacity:0.2,
+side:THREE.DoubleSide
+})
+);
+ring.rotation.x=Math.PI/2;
+world.add(ring);
+rings.push(ring);
+}
+
+// Nodes
+const nodes=[];
+for(let i=0;i<20;i++){
+const node=new THREE.Mesh(
+new THREE.SphereGeometry(1.8,16,16),
+new THREE.MeshBasicMaterial({color:'#67E8F9'})
+);
+
+const angle=(i/20)*Math.PI*2;
+const radius=35+Math.random()*20;
+
+node.userData={
+angle,
+radius,
+speed:0.002+Math.random()*0.003
+};
+
+world.add(node);
+nodes.push(node);
+}
+
+// Connections
+const connectionGroup=new THREE.Group();
+world.add(connectionGroup);
+
+function buildConnections(){
+connectionGroup.clear();
+
+nodes.forEach(node=>{
+const curve=new THREE.QuadraticBezierCurve3(
+hub.position.clone(),
+new THREE.Vector3(
+node.position.x*0.4,
+node.position.y*0.4+15,
+node.position.z*0.4
+),
+node.position.clone()
+);
+
+const points=curve.getPoints(40);
+
+const geo=new THREE.BufferGeometry().setFromPoints(points);
+
+const line=new THREE.Line(
+geo,
+new THREE.LineBasicMaterial({
+color:0x00d4ff,
+transparent:true,
+opacity:0.3
+})
+);
+
+connectionGroup.add(line);
+});
+}
+
+// Pulses
+const pulses=[];
+
+for(let i=0;i<25;i++){
+const pulse=new THREE.Mesh(
+new THREE.SphereGeometry(0.5,8,8),
+new THREE.MeshBasicMaterial({color:0xffffff})
+);
+
+world.add(pulse);
+
+pulses.push({
+mesh:pulse,
+progress:Math.random()
+});
+}
+
+const mouse={x:0,y:0};
+
+window.addEventListener("mousemove",(e)=>{
+mouse.x=(e.clientX/window.innerWidth)-0.5;
+mouse.y=(e.clientY/window.innerHeight)-0.5;
+});
+
+window.addEventListener("click",()=>{
+rings.forEach(r=>{
+r.scale.set(0.5,0.5,0.5);
+});
+});
+
+window.addEventListener("resize",()=>{
+camera.aspect=window.innerWidth/window.innerHeight;
+camera.updateProjectionMatrix();
+renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+function animate(time){
+
+requestAnimationFrame(animate);
+
+world.rotation.y += ((mouse.x*0.5)-world.rotation.y)*0.02;
+world.rotation.x += ((-mouse.y*0.3)-world.rotation.x)*0.02;
+
+// Hub breathing
+const scale=1+Math.sin(time*0.002)*0.08;
+hub.scale.set(scale,scale,scale);
+
+// Orbiting nodes
+nodes.forEach((node,index)=>{
+
+node.userData.angle += node.userData.speed;
+
+node.position.x=Math.cos(node.userData.angle)*node.userData.radius;
+node.position.y=Math.sin(node.userData.angle*1.2)*12;
+node.position.z=Math.sin(node.userData.angle)*node.userData.radius;
+
+const s=1+Math.sin(time*0.003+index)*0.4;
+node.scale.set(s,s,s);
+
+});
+
+buildConnections();
+
+// Ring pulses
+rings.forEach((ring,index)=>{
+ring.scale.x += (1-ring.scale.x)*0.04;
+ring.scale.y += (1-ring.scale.y)*0.04;
+
+ring.material.opacity=0.25+Math.sin(time*0.001+index)*0.08;
+});
+
+// Communication pulses
+pulses.forEach((pulse,index)=>{
+
+const target=nodes[index%nodes.length];
+
+pulse.progress += 0.005;
+
+if(pulse.progress>1) pulse.progress=0;
+
+pulse.mesh.position.lerpVectors(
+hub.position,
+target.position,
+pulse.progress
+);
+
+});
+
+stars.rotation.y += 0.0002;
+
+renderer.render(scene,camera);
+}
+
+animate();
+
+</script>
+
+</body>
+</html>

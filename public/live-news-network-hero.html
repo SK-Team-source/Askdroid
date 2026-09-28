@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI News Network</title>
+<style>
+html,body{
+margin:0;
+height:100%;
+overflow:hidden;
+background:linear-gradient(180deg,#020617,#081225);
+}
+canvas{display:block;}
+</style>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'https://unpkg.com/three@0.165.0/build/three.module.js';
+
+const scene=new THREE.Scene();
+
+const camera=new THREE.PerspectiveCamera(
+60,
+window.innerWidth/window.innerHeight,
+0.1,
+2000
+);
+camera.position.set(0,25,90);
+
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth,window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+document.body.appendChild(renderer.domElement);
+
+// Data Landscape
+const world=new THREE.Group();
+scene.add(world);
+
+// Background particles
+const bgGeo=new THREE.BufferGeometry();
+const bgCount=3500;
+const bgPos=new Float32Array(bgCount*3);
+
+for(let i=0;i<bgCount;i++){
+bgPos[i*3]=(Math.random()-0.5)*500;
+bgPos[i*3+1]=(Math.random()-0.5)*250;
+bgPos[i*3+2]=(Math.random()-0.5)*500;
+}
+
+bgGeo.setAttribute('position',new THREE.BufferAttribute(bgPos,3));
+
+const bgParticles=new THREE.Points(
+bgGeo,
+new THREE.PointsMaterial({
+color:'#67E8F9',
+size:1,
+transparent:true,
+opacity:.6
+})
+);
+
+world.add(bgParticles);
+
+// News Nodes
+const nodes=[];
+const nodeGroup=new THREE.Group();
+world.add(nodeGroup);
+
+for(let i=0;i<120;i++){
+
+const node=new THREE.Mesh(
+new THREE.SphereGeometry(Math.random()*0.8+0.5,10,10),
+new THREE.MeshBasicMaterial({
+color:i%8===0?0xffffff:0x67E8F9
+})
+);
+
+node.position.set(
+(Math.random()-0.5)*180,
+(Math.random()-0.5)*50,
+(Math.random()-0.5)*120
+);
+
+node.userData={
+pulse:Math.random()*10
+};
+
+nodeGroup.add(node);
+nodes.push(node);
+}
+
+// Connections
+const lineGroup=new THREE.Group();
+world.add(lineGroup);
+
+for(let i=0;i<80;i++){
+
+const a=nodes[Math.floor(Math.random()*nodes.length)];
+const b=nodes[Math.floor(Math.random()*nodes.length)];
+
+const geo=new THREE.BufferGeometry().setFromPoints([
+a.position,
+b.position
+]);
+
+const line=new THREE.Line(
+geo,
+new THREE.LineBasicMaterial({
+color:0x00d4ff,
+transparent:true,
+opacity:0.18
+})
+);
+
+lineGroup.add(line);
+}
+
+// Trending Rings
+const rings=[];
+
+for(let i=0;i<6;i++){
+
+const ring=new THREE.Mesh(
+new THREE.RingGeometry(3,3.5,64),
+new THREE.MeshBasicMaterial({
+color:0x00d4ff,
+transparent:true,
+opacity:0.25,
+side:THREE.DoubleSide
+})
+);
+
+ring.position.set(
+(Math.random()-0.5)*120,
+(Math.random()-0.5)*40,
+(Math.random()-0.5)*60
+);
+
+ring.rotation.x=Math.PI/2;
+
+world.add(ring);
+rings.push(ring);
+}
+
+// Data Pulses
+const pulses=[];
+
+for(let i=0;i<40;i++){
+
+const pulse=new THREE.Mesh(
+new THREE.SphereGeometry(.4,8,8),
+new THREE.MeshBasicMaterial({color:0xffffff})
+);
+
+pulse.userData={
+start:nodes[Math.floor(Math.random()*nodes.length)],
+end:nodes[Math.floor(Math.random()*nodes.length)],
+t:Math.random()
+};
+
+world.add(pulse);
+pulses.push(pulse);
+}
+
+let mouseX=0;
+let mouseY=0;
+
+window.addEventListener('mousemove',(e)=>{
+mouseX=(e.clientX/window.innerWidth)-0.5;
+mouseY=(e.clientY/window.innerHeight)-0.5;
+});
+
+window.addEventListener('resize',()=>{
+camera.aspect=window.innerWidth/window.innerHeight;
+camera.updateProjectionMatrix();
+renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+function animate(time){
+
+requestAnimationFrame(animate);
+
+world.rotation.y += ((mouseX*0.3)-world.rotation.y)*0.02;
+world.rotation.x += ((-mouseY*0.1)-world.rotation.x)*0.02;
+
+// Node pulsing
+nodes.forEach((node,index)=>{
+const s=1+Math.sin(time*0.002+index)*0.4;
+node.scale.set(s,s,s);
+});
+
+// Trending waves
+rings.forEach((ring,index)=>{
+const v=(Math.sin(time*0.001+index)+1)/2;
+
+ring.scale.set(
+1+v*4,
+1+v*4,
+1
+);
+
+ring.material.opacity=0.3-v*0.25;
+});
+
+// Data pulses
+pulses.forEach(p=>{
+
+p.userData.t+=0.004;
+
+if(p.userData.t>1){
+
+p.userData.t=0;
+p.userData.start=nodes[Math.floor(Math.random()*nodes.length)];
+p.userData.end=nodes[Math.floor(Math.random()*nodes.length)];
+}
+
+p.position.lerpVectors(
+p.userData.start.position,
+p.userData.end.position,
+p.userData.t
+);
+
+});
+
+bgParticles.rotation.y+=0.00015;
+nodeGroup.rotation.y+=0.0005;
+
+renderer.render(scene,camera);
+}
+
+animate();
+</script>
+</body>
+</html>

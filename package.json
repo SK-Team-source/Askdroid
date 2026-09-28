@@ -1,0 +1,23 @@
+{
+  "name": "askdroid-nextjs",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Askdroid — AI and Robotics Directory. Modern Next.js rebuild.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@fontsource/fraunces": "^5.1.0",
+    "@fontsource/ibm-plex-mono": "^5.1.0",
+    "@fontsource/ibm-plex-sans": "^5.1.0",
+    "next": "^15.5.25",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "engines": {
+    "node": ">=18.17.0"
+  }
+}
