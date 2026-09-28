@@ -81,7 +81,7 @@ export default function HomePage() {
             <div className="split__media split__media--feature">
               <div className="media-card">
                 <Image
-                  src="/images/seven-of-nine-framed.jpg"
+                  src="/images/seven-of-nine-framed.webp"
                   alt="Meet the Time-Twisted Trio"
                   width={640}
                   height={480}
