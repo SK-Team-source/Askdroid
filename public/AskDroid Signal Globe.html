@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>AskDroid — Signal Globe Banner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  html, body { margin: 0; padding: 0; background: #05090d; overflow: hidden; height: 100%; }
+  #stage {
+    position: fixed; inset: 0;
+    width: 100vw; height: 100vh;
+    cursor: crosshair;
+    background: radial-gradient(ellipse at 50% 55%, #0a1520 0%, #05090d 70%);
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  /* Optional overlay — remove or hide when embedding on WordPress */
+  .overlay {
+    position: absolute; inset: 0; pointer-events: none;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: #fff; text-align: center; padding: 0 20px;
+  }
+  .overlay h1 {
+    font-size: clamp(28px, 4vw, 52px);
+    font-weight: 600; margin: 0 0 12px; letter-spacing: -0.01em;
+    text-shadow: 0 2px 24px rgba(0,0,0,0.6);
+  }
+  .overlay p {
+    margin: 0; font-size: clamp(14px, 1.4vw, 20px); opacity: 0.85;
+    text-shadow: 0 2px 16px rgba(0,0,0,0.6);
+  }
+  .hint {
+    position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%);
+    font-family: ui-monospace, monospace; font-size: 11px; color: rgba(255,255,255,0.55);
+    letter-spacing: 0.12em; text-transform: uppercase; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="c"></canvas>
+  <!-- Delete this overlay block when embedding — your WordPress template already has the headline + search bar -->
+ 
+</div>
+
+<script>
+/*
+  AskDroid — Signal Globe
+  ------------------------
+  Dotted wireframe Earth built from points on a sphere. Arcs pulse between
+  "directory" city nodes. The cursor rotates the globe; click broadcasts a
+  pulse from the point nearest the cursor.
+
+  Self-contained. No dependencies. Works on WordPress as either:
+    (a) a Custom HTML block (paste this entire file's <body> + <script>), or
+    (b) an iframe pointing at this file uploaded to /wp-content/uploads/.
+
+  Query params (optional):
+    ?hue=190          primary accent hue (default 192 — AskDroid cyan)
+    ?intensity=1.1    overall brightness multiplier (default 1)
+    ?overlay=0        hides the demo overlay (for iframe embedding)
+*/
+
+const params = new URLSearchParams(location.search);
+const HUE = +(params.get('hue') ?? 192);
+const INTENSITY = +(params.get('intensity') ?? 1);
+if (params.get('overlay') === '0') {
+  document.querySelector('.overlay')?.remove();
+  document.querySelector('.hint')?.remove();
+}
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = canvas.clientWidth = window.innerWidth;
+  H = canvas.clientHeight = window.innerHeight;
+  canvas.width = W * DPR; canvas.height = H * DPR;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', resize); resize();
+
+// --- Sphere sampling (golden-spiral / Fibonacci) ---
+const N_POINTS = 1400;
+const points = [];
+for (let i = 0; i < N_POINTS; i++) {
+  const y = 1 - (i / (N_POINTS - 1)) * 2;
+  const r = Math.sqrt(1 - y * y);
+  const theta = i * Math.PI * (3 - Math.sqrt(5));
+  points.push([Math.cos(theta) * r, y, Math.sin(theta) * r]);
+}
+
+// --- "Directory" hub cities — lat/lon of a few real-world tech hubs ---
+const CITIES = [
+  [37.77, -122.42],  // San Francisco
+  [40.71, -74.01],   // New York
+  [51.51, -0.13],    // London
+  [52.52, 13.40],    // Berlin
+  [48.85, 2.35],     // Paris
+  [55.75, 37.62],    // Moscow
+  [35.68, 139.69],   // Tokyo
+  [1.35, 103.82],    // Singapore
+  [-33.87, 151.21],  // Sydney
+  [28.61, 77.21],    // Delhi
+  [31.23, 121.47],   // Shanghai
+  [-23.55, -46.63],  // São Paulo
+  [19.43, -99.13],   // Mexico City
+  [25.20, 55.27],    // Dubai
+  [-26.20, 28.04],   // Johannesburg
+  [30.05, 31.25],    // Cairo
+  [43.65, -79.38],   // Toronto
+  [59.33, 18.07],    // Stockholm
+];
+function latLonToXYZ(lat, lon) {
+  const p = (90 - lat) * Math.PI / 180;
+  const t = (lon + 180) * Math.PI / 180;
+  return [
+    -Math.sin(p) * Math.cos(t),
+     Math.cos(p),
+     Math.sin(p) * Math.sin(t),
+  ];
+}
+const hubs = CITIES.map(([la, lo]) => latLonToXYZ(la, lo));
+
+// Precompute a few default arc routes (index pairs)
+const arcs = [];
+function addArc(a, b) {
+  arcs.push({ a, b, phase: Math.random(), speed: 0.15 + Math.random() * 0.25, strength: 0.6 + Math.random() * 0.5 });
+}
+for (let i = 0; i < 14; i++) {
+  let a = (Math.random() * hubs.length) | 0;
+  let b = (Math.random() * hubs.length) | 0;
+  if (a !== b) addArc(a, b);
+}
+
+// Click-added arcs (from a hub near cursor outward)
+const burstArcs = [];
+
+// --- Rotation state ---
+let yaw = 0, pitch = 0;
+let yawTarget = 0, pitchTarget = 0;
+let mouseX = 0.5, mouseY = 0.5;
+let mouseIn = false;
+
+window.addEventListener('pointermove', (e) => {
+  mouseX = e.clientX / W;
+  mouseY = e.clientY / H;
+  mouseIn = true;
+  yawTarget = (mouseX - 0.5) * 1.6;
+  pitchTarget = (mouseY - 0.5) * 0.9;
+});
+window.addEventListener('pointerleave', () => { mouseIn = false; yawTarget = 0; pitchTarget = 0; });
+
+window.addEventListener('pointerdown', (e) => {
+  // Find hub nearest the pointer in screen space, fire a burst to 3 others
+  const x = (e.clientX / W - 0.5);
+  const y = -(e.clientY / H - 0.5);
+  let best = 0, bestD = 1e9;
+  const cy = Math.cos(pitch), sy = Math.sin(pitch);
+  const cx = Math.cos(yaw),  sx = Math.sin(yaw);
+  for (let i = 0; i < hubs.length; i++) {
+    const [hx, hy, hz] = hubs[i];
+    // rotate same as render
+    const y1 = hy * cy - hz * sy;
+    const z1 = hy * sy + hz * cy;
+    const x1 = hx * cx + z1 * sx;
+    if (z1 * cx - hx * sx < 0) continue; // back side
+    const dx = x1 * 0.4 - x, dy = y1 * 0.4 - y;
+    const d = dx*dx + dy*dy;
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  for (let k = 0; k < 4; k++) {
+    const other = (best + 1 + ((Math.random() * (hubs.length - 1)) | 0)) % hubs.length;
+    burstArcs.push({ a: best, b: other, birth: performance.now(), life: 2200, strength: 1.4 });
+  }
+  if (burstArcs.length > 30) burstArcs.splice(0, burstArcs.length - 30);
+});
+
+// --- Helpers ---
+const accent = (l, a = 1) => `hsla(${HUE}, 70%, ${l}%, ${a})`;
+const accent2 = (l, a = 1) => `hsla(${(HUE + 40) % 360}, 80%, ${l}%, ${a})`; // teal→cyan-green
+const accentHot = (l, a = 1) => `hsla(${(HUE - 35 + 360) % 360}, 85%, ${l}%, ${a})`; // warm pulse
+
+function rotate(x, y, z) {
+  // yaw (around Y), then pitch (around X)
+  const cx = Math.cos(yaw),  sx = Math.sin(yaw);
+  const cy = Math.cos(pitch), sy = Math.sin(pitch);
+  let x1 = x * cx + z * sx;
+  let z1 = -x * sx + z * cx;
+  let y1 = y * cy - z1 * sy;
+  let z2 = y * sy + z1 * cy;
+  return [x1, y1, z2];
+}
+
+function project(x, y, z, radius, cx, cy) {
+  // orthographic with faux depth tint
+  return { px: cx + x * radius, py: cy - y * radius, depth: z };
+}
+
+// Great-circle arc interpolation (slerp)
+function slerp(a, b, t) {
+  const dot = Math.max(-1, Math.min(1, a[0]*b[0] + a[1]*b[1] + a[2]*b[2]));
+  const theta = Math.acos(dot);
+  if (theta < 1e-4) return a;
+  const s1 = Math.sin((1 - t) * theta) / Math.sin(theta);
+  const s2 = Math.sin(t * theta) / Math.sin(theta);
+  return [
+    a[0]*s1 + b[0]*s2,
+    a[1]*s1 + b[1]*s2,
+    a[2]*s1 + b[2]*s2,
+  ];
+}
+
+// Auto-rotate drift when no cursor input
+let autoT = 0;
+
+function frame(now) {
+  autoT += 0.0025;
+
+  // Smooth yaw/pitch toward target (plus idle drift)
+  const idleYaw = Math.sin(autoT * 0.7) * 0.25;
+  const idlePitch = Math.sin(autoT * 0.3) * 0.08;
+  const tYaw = mouseIn ? yawTarget : idleYaw;
+  const tPitch = mouseIn ? pitchTarget : idlePitch;
+  yaw   += (tYaw   - yaw)   * 0.05;
+  pitch += (tPitch - pitch) * 0.05;
+
+  // Clear with slight trail (creates soft motion blur on arcs)
+  ctx.fillStyle = 'rgba(5, 9, 13, 0.35)';
+  ctx.fillRect(0, 0, W, H);
+
+  const cx = W / 2, cy = H / 2;
+  const radius = Math.min(W, H) * 0.38;
+
+  // Atmospheric glow behind globe
+  const grd = ctx.createRadialGradient(cx, cy, radius * 0.7, cx, cy, radius * 1.6);
+  grd.addColorStop(0, accent(55, 0.18 * INTENSITY));
+  grd.addColorStop(1, accent(50, 0));
+  ctx.fillStyle = grd;
+  ctx.beginPath(); ctx.arc(cx, cy, radius * 1.6, 0, Math.PI * 2); ctx.fill();
+
+  // Faint grid rings (longitudes + equator)
+  ctx.lineWidth = 1;
+  for (let k = 0; k < 7; k++) {
+    const rot = (k / 7) * Math.PI;
+    ctx.beginPath();
+    for (let j = 0; j <= 64; j++) {
+      const u = (j / 64) * Math.PI * 2;
+      let x = Math.sin(u), y = Math.cos(u), z = 0;
+      // rotate around Y by `rot`
+      const cr = Math.cos(rot), sr = Math.sin(rot);
+      const x2 = x * cr + z * sr, z2 = -x * sr + z * cr;
+      const [rx, ry, rz] = rotate(x2, y, z2);
+      if (rz < -0.15) continue;
+      const { px, py } = project(rx, ry, rz, radius, cx, cy);
+      if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.strokeStyle = accent(48, 0.08 * INTENSITY);
+    ctx.stroke();
+  }
+  // Equator
+  ctx.beginPath();
+  for (let j = 0; j <= 128; j++) {
+    const u = (j / 128) * Math.PI * 2;
+    const [rx, ry, rz] = rotate(Math.cos(u), 0, Math.sin(u));
+    if (rz < -0.15) continue;
+    const { px, py } = project(rx, ry, rz, radius, cx, cy);
+    if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.strokeStyle = accent(55, 0.18 * INTENSITY);
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Dotted globe points
+  for (let i = 0; i < points.length; i++) {
+    const [x, y, z] = points[i];
+    const [rx, ry, rz] = rotate(x, y, z);
+    if (rz < -0.05) continue;
+    const { px, py } = project(rx, ry, rz, radius, cx, cy);
+    const fade = Math.max(0, (rz + 0.05) / 1.05);
+    const size = 0.8 + fade * 1.1;
+    // subtle twinkle
+    const tw = 0.7 + 0.3 * Math.sin(autoT * 3 + i * 0.37);
+    ctx.fillStyle = accent(60 + fade * 20, (0.12 + fade * 0.55) * tw * INTENSITY);
+    ctx.fillRect(px - size / 2, py - size / 2, size, size);
+  }
+
+  // Arcs between hubs
+  const drawArc = (ai, bi, phase, strength, hot) => {
+    const A = hubs[ai], B = hubs[bi];
+    const midDot = A[0]*B[0] + A[1]*B[1] + A[2]*B[2];
+    const dist = Math.acos(Math.max(-1, Math.min(1, midDot)));
+    const lift = 0.18 + dist * 0.18; // arc altitude
+    const steps = 48;
+    ctx.beginPath();
+    let started = false;
+    for (let j = 0; j <= steps; j++) {
+      const t = j / steps;
+      const p = slerp(A, B, t);
+      // lift above the sphere surface
+      const bump = Math.sin(t * Math.PI) * lift;
+      const px3 = p[0] * (1 + bump);
+      const py3 = p[1] * (1 + bump);
+      const pz3 = p[2] * (1 + bump);
+      const [rx, ry, rz] = rotate(px3, py3, pz3);
+      if (rz < -0.25) { started = false; continue; }
+      const { px, py } = project(rx, ry, rz, radius, cx, cy);
+      if (!started) { ctx.moveTo(px, py); started = true; }
+      else ctx.lineTo(px, py);
+    }
+    ctx.strokeStyle = hot ? accentHot(72, 0.55 * strength * INTENSITY) : accent2(70, 0.3 * strength * INTENSITY);
+    ctx.lineWidth = hot ? 1.4 : 0.9;
+    ctx.stroke();
+
+    // Pulse traveling along the arc
+    const pulseT = (phase) % 1;
+    const p = slerp(A, B, pulseT);
+    const bump = Math.sin(pulseT * Math.PI) * lift;
+    const pp = [p[0] * (1 + bump), p[1] * (1 + bump), p[2] * (1 + bump)];
+    const [rx, ry, rz] = rotate(pp[0], pp[1], pp[2]);
+    if (rz >= -0.2) {
+      const { px, py } = project(rx, ry, rz, radius, cx, cy);
+      const r = hot ? 3.5 : 2.2;
+      const glow = ctx.createRadialGradient(px, py, 0, px, py, r * 5);
+      glow.addColorStop(0, hot ? accentHot(85, 1 * INTENSITY) : accent(85, 0.9 * INTENSITY));
+      glow.addColorStop(1, hot ? accentHot(65, 0) : accent(65, 0));
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(px, py, r * 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(px, py, r * 0.7, 0, Math.PI * 2); ctx.fill();
+    }
+  };
+
+  // Update + draw default arcs
+  for (const a of arcs) {
+    a.phase = (a.phase + a.speed * 0.008) % 1;
+    drawArc(a.a, a.b, a.phase, a.strength, false);
+  }
+  // Burst arcs from click
+  for (let i = burstArcs.length - 1; i >= 0; i--) {
+    const b = burstArcs[i];
+    const age = now - b.birth;
+    if (age > b.life) { burstArcs.splice(i, 1); continue; }
+    const t = age / b.life;
+    drawArc(b.a, b.b, t, b.strength * (1 - t), true);
+  }
+
+  // Hub nodes
+  for (let i = 0; i < hubs.length; i++) {
+    const [x, y, z] = hubs[i];
+    const [rx, ry, rz] = rotate(x, y, z);
+    if (rz < -0.05) continue;
+    const { px, py } = project(rx, ry, rz, radius, cx, cy);
+    const fade = Math.max(0, (rz + 0.05) / 1.05);
+    // ring
+    ctx.strokeStyle = accent(75, (0.35 + fade * 0.4) * INTENSITY);
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(px, py, 4 + fade * 2, 0, Math.PI * 2); ctx.stroke();
+    // core
+    ctx.fillStyle = accent2(85, (0.7 + fade * 0.3) * INTENSITY);
+    ctx.beginPath(); ctx.arc(px, py, 1.6 + fade * 0.8, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Left-side signal field: light extension with only a few subtle nodes to keep the pattern clean
+  const leftField = [
+    { x: W * 0.02, y: H * 0.56 },
+    { x: W * 0.10, y: H * 0.33 },
+    { x: W * 0.19, y: H * 0.46 },
+    { x: W * 0.28, y: H * 0.61 }
+  ];
+
+  ctx.save();
+  ctx.lineWidth = 1.1;
+  ctx.setLineDash([2, 10]);
+  for (let i = 0; i < leftField.length; i++) {
+    const a = leftField[i];
+    const b = leftField[(i + 2) % leftField.length];
+    const mx = (a.x + b.x) / 2 + Math.sin(autoT * 1.2 + i) * 24;
+    const my = (a.y + b.y) / 2 + Math.cos(autoT * 1.7 + i) * 18;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.quadraticCurveTo(mx, my, b.x, b.y);
+    ctx.strokeStyle = 'rgba(124, 208, 255, 0.28)';
+    ctx.stroke();
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(W * -0.02, H * 0.30);
+  ctx.quadraticCurveTo(W * 0.08, H * 0.12, W * 0.22, H * 0.46);
+  ctx.strokeStyle = 'rgba(126, 200, 255, 0.22)';
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(W * -0.01, H * 0.76);
+  ctx.quadraticCurveTo(W * 0.10, H * 0.87, W * 0.22, H * 0.66);
+  ctx.strokeStyle = 'rgba(126, 200, 255, 0.20)';
+  ctx.stroke();
+
+  ctx.restore();
+
+  for (const p of leftField) {
+    const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 9);
+    g.addColorStop(0, 'rgba(225, 240, 255, 0.95)');
+    g.addColorStop(0.35, 'rgba(118, 182, 255, 0.56)');
+    g.addColorStop(1, 'rgba(118, 182, 255, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 9, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = '#deebff';
+    ctx.beginPath(); ctx.arc(p.x, p.y, 2.1, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Cursor reticle (subtle)
+  if (mouseIn) {
+    const mx = mouseX * W, my = mouseY * H;
+    ctx.strokeStyle = accent(80, 0.25);
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(mx, my, 18, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(mx - 26, my); ctx.lineTo(mx - 10, my);
+    ctx.moveTo(mx + 10, my); ctx.lineTo(mx + 26, my);
+    ctx.moveTo(mx, my - 26); ctx.lineTo(mx, my - 10);
+    ctx.moveTo(mx, my + 10); ctx.lineTo(mx, my + 26);
+    ctx.stroke();
+  }
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>
