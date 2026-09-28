@@ -1,0 +1,17 @@
+<svg width="1200" height="700" viewBox="0 0 1200 700" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="700" fill="#07141F"/>
+  <rect x="52" y="52" width="1096" height="596" rx="26" fill="url(#paint0_linear)" stroke="#203449"/>
+  <circle cx="260" cy="280" r="88" fill="#102B3A"/>
+  <circle cx="470" cy="280" r="88" fill="#1A3649"/>
+  <circle cx="680" cy="280" r="88" fill="#102B3A"/>
+  <circle cx="890" cy="280" r="88" fill="#1A3649"/>
+  <rect x="173" y="450" width="855" height="30" rx="15" fill="#DCF7FF" fill-opacity="0.72"/>
+  <rect x="260" y="495" width="680" height="20" rx="10" fill="#D8EFFD" fill-opacity="0.4"/>
+  <text x="600" y="620" text-anchor="middle" fill="#DDF7FF" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="700">TEAM COLLABORATION</text>
+  <defs>
+    <linearGradient id="paint0_linear" x1="150" y1="90" x2="1000" y2="640" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1B2B"/>
+      <stop offset="1" stop-color="#081620"/>
+    </linearGradient>
+  </defs>
+</svg>
