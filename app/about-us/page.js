@@ -41,7 +41,7 @@ export default function AboutPage() {
           <div className="split">
             <div className="figure-frame">
               <Image
-                src="/images/people-generating-images-using-artificial-intelligence-laptop-1-1024x683.jpg"
+                src="/images/people-generating-images-using-artificial-intelligence-laptop-1-1024x683.webp"
                 alt="Team using AI to build the Askdroid directory"
                 width={1024}
                 height={683}
@@ -77,7 +77,7 @@ export default function AboutPage() {
           <div className="split reverse">
             <div className="split__media">
               <Image
-                src="/images/4743-1-1024x574.jpg"
+                src="/images/4743-1-1024x574.webp"
                 alt="Askdroid team collaborating on the AI and robotics directory"
                 width={1024}
                 height={574}
